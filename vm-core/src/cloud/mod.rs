@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+use crate::vm::VM;
 
 /// Common operations every cloud backend must support.
 /// Add a new cloud by implementing this trait and registering it
@@ -10,7 +10,7 @@ use std::str::FromStr;
 #[async_trait]
 pub trait CloudProvider: Send + Sync {
     fn provider(&self) -> Provider;
-    async fn list_vms(&self) -> anyhow::Result<Vec<Vm>>;
+    async fn list_vms(&self) -> anyhow::Result<Vec<VM>>;
     async fn start_vm(&self, id: &str) -> anyhow::Result<()>;
     async fn stop_vm(&self, id: &str) -> anyhow::Result<()>;
     async fn delete_vm(&self, id: &str) -> anyhow::Result<()>;
@@ -51,6 +51,8 @@ impl FromStr for Provider {
 }
 
 pub mod providers {
+    use std::collections::HashMap;
+    use crate::vm::VMState;
     use super::*;
 
     /// TODO: wire up `aws_sdk_ec2::Client` here and implement against
@@ -60,10 +62,19 @@ pub mod providers {
     #[async_trait]
     impl CloudProvider for AwsProvider {
         fn provider(&self) -> Provider {
-            Provider::Aws
+            Provider::AWS
         }
-        async fn list_vms(&self) -> anyhow::Result<Vec<Vm>> {
-            Ok(vec![])
+        async fn list_vms(&self) -> anyhow::Result<Vec<VM>> {
+            Ok(vec![VM{
+                id: "id_test-vm-preinit".to_string(),
+                provider: Provider::AWS,
+                name: "test-vm-preinit".to_string(),
+                region: "us".to_string(),
+                state: VMState::STOPPED,
+                instance_type: "ec2".to_string(),
+                public_ip: Some("1.2.3.4".to_string()),
+                tags: HashMap::new(),
+            }])
         }
         async fn start_vm(&self, _id: &str) -> anyhow::Result<()> {
             Ok(())
@@ -83,9 +94,9 @@ pub mod providers {
     #[async_trait]
     impl CloudProvider for GcpProvider {
         fn provider(&self) -> Provider {
-            Provider::Gcp
+            Provider::GCP
         }
-        async fn list_vms(&self) -> anyhow::Result<Vec<Vm>> {
+        async fn list_vms(&self) -> anyhow::Result<Vec<VM>> {
             Ok(vec![])
         }
         async fn start_vm(&self, _id: &str) -> anyhow::Result<()> {
@@ -106,9 +117,9 @@ pub mod providers {
     #[async_trait]
     impl CloudProvider for AzureProvider {
         fn provider(&self) -> Provider {
-            Provider::Azure
+            Provider::AZURE
         }
-        async fn list_vms(&self) -> anyhow::Result<Vec<Vm>> {
+        async fn list_vms(&self) -> anyhow::Result<Vec<VM>> {
             Ok(vec![])
         }
         async fn start_vm(&self, _id: &str) -> anyhow::Result<()> {
@@ -128,9 +139,9 @@ pub mod providers {
     #[async_trait]
     impl CloudProvider for DigitalOceanProvider {
         fn provider(&self) -> Provider {
-            Provider::DigitalOcean
+            Provider::DIGITAL_OCEAN
         }
-        async fn list_vms(&self) -> anyhow::Result<Vec<Vm>> {
+        async fn list_vms(&self) -> anyhow::Result<Vec<VM>> {
             Ok(vec![])
         }
         async fn start_vm(&self, _id: &str) -> anyhow::Result<()> {
@@ -155,7 +166,11 @@ impl CloudAggregator {
         Self { providers }
     }
 
-    pub async fn list_vms(&self, filter: Option<&str>) -> anyhow::Result<Vec<Vm>> {
+    pub async fn add_vm(&self, vm_name: &str) -> bool {
+        false
+    }
+
+    pub async fn list_vms(&self, filter: Option<&str>) -> anyhow::Result<Vec<VM>> {
         let mut all = Vec::new();
         for p in &self.providers {
             if let Some(f) = filter {
